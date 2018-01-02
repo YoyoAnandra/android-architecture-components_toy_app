@@ -34,10 +34,14 @@ public class AddTaskActivity extends AppCompatActivity {
 
     // Extra for the task ID to be received in the intent
     public static final String EXTRA_TASK_ID = "extraTaskId";
+    // Extra for the task ID to be received after rotation
+    public static final String INSTANCE_TASK_ID = "instanceTaskId";
     // Constants for priority
     public static final int PRIORITY_HIGH = 1;
     public static final int PRIORITY_MEDIUM = 2;
     public static final int PRIORITY_LOW = 3;
+
+    public static final int DEFAULT_TASK_ID = -1;
 
     // Fields for views
     EditText mEditText;
@@ -47,18 +51,46 @@ public class AddTaskActivity extends AppCompatActivity {
     // Member variable for the Database
     private AppDatabase mDb;
 
+    private int mTaskId = DEFAULT_TASK_ID;
+
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_task);
 
         initViews();
 
-        Intent intent = getIntent();
-        if (intent != null && intent.hasExtra(EXTRA_TASK_ID)) {
-            // populate the UI
+        mDb = AppDatabase.getInstance(getApplicationContext());
+
+        if (savedInstanceState != null && savedInstanceState.containsKey(INSTANCE_TASK_ID)) {
+            mTaskId = savedInstanceState.getInt(INSTANCE_TASK_ID, DEFAULT_TASK_ID);
         }
 
-        mDb = AppDatabase.getInstance(getApplicationContext());
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra(EXTRA_TASK_ID)) {
+            mButton.setText(R.string.update_button);
+            if (mTaskId == DEFAULT_TASK_ID) {
+                // populate the UI
+                mTaskId = intent.getIntExtra(EXTRA_TASK_ID, DEFAULT_TASK_ID);
+                AppExecutors.getInstance().diskIO().execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        final TaskEntry task = mDb.taskDao().loadTaskById(mTaskId);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                populateUI(task);
+                            }
+                        });
+                    }
+                });
+            }
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putInt(INSTANCE_TASK_ID, mTaskId);
+        super.onSaveInstanceState(outState);
     }
 
     /**
@@ -77,13 +109,13 @@ public class AddTaskActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * populateUI would be called to populate the UI when in update mode
-     *
-     * @param task the taskEntry to populate the UI
-     */
     private void populateUI(TaskEntry task) {
+        if (task == null) {
+            return;
+        }
 
+        mEditText.setText(task.getDescription());
+        setPriorityInViews(task.getPriority());
     }
 
     /**
@@ -95,11 +127,18 @@ public class AddTaskActivity extends AppCompatActivity {
         int priority = getPriorityFromViews();
         Date date = new Date();
 
-        final TaskEntry taskEntry = new TaskEntry(description, priority, date);
+        final TaskEntry task = new TaskEntry(description, priority, date);
         AppExecutors.getInstance().diskIO().execute(new Runnable() {
             @Override
             public void run() {
-                mDb.taskDao().insertTask(taskEntry);
+                if (mTaskId == DEFAULT_TASK_ID) {
+                    // insert new task
+                    mDb.taskDao().insertTask(task);
+                } else {
+                    //update task
+                    task.setId(mTaskId);
+                    mDb.taskDao().updateTask(task);
+                }
                 finish();
             }
         });
