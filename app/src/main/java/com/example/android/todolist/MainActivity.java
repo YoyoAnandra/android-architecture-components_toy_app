@@ -24,6 +24,7 @@ import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.helper.ItemTouchHelper;
+import android.util.Log;
 import android.view.View;
 
 import com.example.android.todolist.database.AppDatabase;
@@ -124,6 +125,7 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.ItemC
         AppExecutors.getInstance().diskIO().execute(new Runnable() {
             @Override
             public void run() {
+                Log.d(TAG, "Actively retrieving the tasks from the DataBase");
                 final List<TaskEntry> tasks = mDb.taskDao().loadAllTasks();
                 runOnUiThread(new Runnable() {
                     @Override
